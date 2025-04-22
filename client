@@ -1,0 +1,288 @@
+const socket = io(); // Connect to the server
+
+let currentRoom = null;
+
+// UI and Display Functions
+function displayName() {
+    blackPlayerName.textContent = "Black"
+    whitePlayerName.textContent = "White"
+}
+
+function displayRanking() {
+    blackPlayerRanking.textContent = "1000"
+    whitePlayerRanking.textContent = "1000"
+}
+
+// Function to update the displayed time
+function updateDisplayCountdown(player) {
+    let timeLeft;
+    let countdownDisplay;
+    if (player === 'black') {
+        timeLeft = timeLeftBlack;
+        countdownDisplay = countdownDisplayBlack;
+    } else {
+        timeLeft = timeLeftWhite;
+        countdownDisplay = countdownDisplayWhite;
+    }
+    const minutes = Math.floor(timeLeft / 60);
+    let seconds = timeLeft % 60;
+    seconds = seconds < 10 ? '0' + seconds : seconds;
+    countdownDisplay.textContent = `${minutes}:${seconds}`;
+}
+
+//Function to update move history
+function updateMoveHistory(action) {
+    const move = document.createElement('p');
+    move.textContent = `${currentPlayer}: ${action === 'pass' ? 'Pass' : `Row ${rows}, Col ${cols}`}`;
+    moveHistory.appendChild(move);
+    moveHistory.scrollTop = moveHistory.scrollHeight;
+}
+
+//Socket.IO Logic and Game Flow Functions
+function switchTurnsAndSendEvent() {
+    switchTurns();
+    turnDisplay.textContent = `${currentPlayer.charAt(0).toUpperCase() + currentPlayer.slice(1)}'s turn`;
+    socket.emit('switchTurn', currentRoom); // Send turn switch event to server
+    if (gameStarted) {
+        clearInterval(countdownInterval);
+        countdownInterval = setInterval(() => updateDisplayCountdown(currentPlayer), 1000);
+    }
+}
+
+function updateCountdownAndSendEvent(player) {
+    updateCountdown(player);
+    updateDisplayCountdown(player)
+    socket.emit('updateCountdown', {
+        room: currentRoom,
+        timeLeftBlack,
+        timeLeftWhite
+    }); // Emit the updated time to the server
+}
+
+function endGame(winner) {
+    gameStarted = false; // Stop the game
+    clearInterval(countdownInterval);
+
+    // Remove click event listeners to prevent stone placement
+    const intersections = document.querySelectorAll('.intersection');
+    intersections.forEach(intersection => {
+        intersection.removeEventListener('click', placeStone);
+    });
+
+    // Display the winner in the winnerDisplay div
+    winnerDisplay.textContent = `${winner}`;
+    winnerDisplay.style.display = 'block'; // Make the winner display visible
+    socket.emit('endGame', {
+        room: currentRoom,
+        winner: winner
+    }); // Notify server that the game has ended
+}
+
+function removeDeadStonesAndUpdateUI(currentPlayer) {
+    const stonesToRemove = removeDeadStones(currentPlayer);
+    removeDeadStonesFromUI(stonesToRemove);
+    socket.emit('removeDeadStones', {
+        room: currentRoom,
+        currentPlayer,
+        stonesToRemove
+    }); // Notify the server about stones removed
+}
+
+function removeDeadStonesFromUI(stonesToRemove) {
+    stonesToRemove.forEach(([r, c]) => {
+        const intersections = document.querySelectorAll('.intersection');
+        let targetIntersection = null;
+        intersections.forEach(intersection => {
+            if (parseInt(intersection.dataset.row) === (r + 1) && parseInt(intersection.dataset.col) === (c + 1)) {
+                targetIntersection = intersection;
+            }
+        });
+        if (targetIntersection) {
+            const stone = targetIntersection.querySelector('.stone');
+            if (stone) {
+                targetIntersection.removeChild(stone);
+            }
+        }
+    });
+}
+
+// UI setup (grid lines, labels, intersections)
+for (let i = 1; i <= 19; i++) {
+    const line = document.createElement('div');
+    line.className = 'grid-line horizontal';
+    line.style.top = `${i * 50}px`;
+    line.style.left = `${margin}px`;
+    line.style.width = `${lineLength}px`
+    grid.appendChild(line);
+}
+
+for (let i = 1; i <= 19; i++) {
+    const line = document.createElement('div');
+    line.className = 'grid-line vertical';
+    line.style.left = `${i * 50}px`;
+    line.style.top = `${margin}px`;
+    line.style.height = `${lineLength}px`
+    grid.appendChild(line);
+}
+
+for (let i = 1; i <= 19; i++) {
+    for (let j = 1; j <= 19; j++) {
+        const intersection = document.createElement('div');
+        intersection.className = 'intersection';
+        intersection.style.left = `${j * 50}px`;
+        intersection.style.top = `${i * 50}px`;
+        intersection.setAttribute('data-row', i);
+        intersection.setAttribute('data-col', j);
+        intersection.addEventListener('click', placeStone);
+        if (intersectionCounter == 60 || intersectionCounter == 66 || intersectionCounter == 72 || intersectionCounter == 174 ||
+            intersectionCounter == 180 || intersectionCounter == 186 || intersectionCounter == 288 || intersectionCounter == 294 || intersectionCounter == 300) {
+            intersection.id = 'hoshi';
+        }
+        grid.appendChild(intersection);
+        intersectionCounter++;
+    }
+}
+
+for (let i = 0; i <= 19; i++) {
+    const rowLabel = document.createElement('div');
+    rowLabel.className = 'label';
+    rowLabel.textContent = rows[i];
+    rowLabel.style.left = '6px';
+    rowLabel.style.top = `${(i + 1) * 50 - 5}px`;
+    grid.appendChild(rowLabel);
+}
+
+for (let j = 0; j <= 19; j++) {
+    const colLabel = document.createElement('div');
+    colLabel.className = 'label';
+    colLabel.textContent = cols[j];
+    colLabel.style.left = `${(j + 1) * 50 - 5}px`;
+    colLabel.style.top = '6px';
+    grid.appendChild(colLabel);
+}
+
+//Primary Game Logic and Socket.IO integration
+function placeStone(e) {
+    if (!gameStarted) {
+        startGame();
+    }
+    if (!gameStarted) return; // Prevent placing stones after the game ends
+
+    const row = parseInt(e.target.dataset.row) - 1;
+    const col = parseInt(e.target.dataset.col) - 1;
+
+    if (gameBoard[row][col] !== null) return;
+
+    if (isSuicideMove(row, col, currentPlayer)) {
+        alert("That move is suicide and not allowed.");
+        return;
+    }
+
+    gameBoard[row][col] = currentPlayer;
+
+    const stone = document.createElement('div');
+    stone.classList.add('stone', currentPlayer);
+    e.target.appendChild(stone);
+
+    // Update the countdown immediately
+    updateCountdownAndSendEvent(currentPlayer);
+
+    //Send the move to the server
+    socket.emit('placeStone', {
+        room: currentRoom,
+        row: row,
+        col: col,
+        player: currentPlayer
+    });
+}
+
+passButton.addEventListener('click', () => {
+    if (areaScoringPhase) {
+        endGame(); // End the game if in area scoring phase
+        return;
+    }
+    passCount++;
+    if (passCount === 2) {
+        areaScoringPhase = true;
+        // Display message to indicate area scoring phase
+        turnDisplay.textContent = "Area scoring phase. Mark dead stones.";
+    } else {
+        switchTurnsAndSendEvent();
+        updateMoveHistory('pass');
+    }
+});
+
+displayName();
+displayRanking();
+
+// Socket.IO Event Handlers
+socket.on('connect', () => {
+    console.log('Connected to server');
+});
+
+// Matchmaking
+document.getElementById('find-match').addEventListener('click', () => {
+    socket.emit('findMatch');
+});
+
+socket.on('waitingForPlayer', () => {
+    alert("Waiting for another player...");
+});
+
+socket.on('gameStart', (data) => {
+    alert("Game started! You are in room: " + data.room);
+    currentRoom = data.room;
+});
+
+socket.on('opponentMove', ({
+    row,
+    col,
+    player
+}) => {
+    // Update gameBoard array
+    gameBoard[row][col] = player;
+
+    // Find the correct intersection on the board
+    const intersections = document.querySelectorAll('.intersection');
+    let targetIntersection = null;
+    intersections.forEach(intersection => {
+        if (parseInt(intersection.dataset.row) === (row + 1) && parseInt(intersection.dataset.col) === (col + 1)) {
+            targetIntersection = intersection;
+        }
+    });
+
+    // Place the stone visually
+    if (targetIntersection) {
+        const stone = document.createElement('div');
+        stone.classList.add('stone', player);
+        targetIntersection.appendChild(stone);
+    }
+
+    switchTurnsAndSendEvent();
+});
+
+// Handle countdown updates
+socket.on('updateCountdown', ({
+    timeLeftBlack: serverTimeLeftBlack,
+    timeLeftWhite: serverTimeLeftWhite
+}) => {
+    timeLeftBlack = serverTimeLeftBlack;
+    timeLeftWhite = serverTimeLeftWhite;
+    updateDisplayCountdown('black');
+    updateDisplayCountdown('white');
+});
+
+// Handle game end event
+socket.on('endGame', ({
+    winner
+}) => {
+    endGame(winner)
+});
+
+//Handle the other player removing the dead stones
+socket.on('removeDeadStones', ({
+    currentPlayer,
+    stonesToRemove
+}) => {
+    removeDeadStonesFromUI(stonesToRemove);
+});

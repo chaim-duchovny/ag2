@@ -1,0 +1,156 @@
+const express = require('express');
+const http = require('http');
+const socketIo = require('socket.io');
+const mysql = require('mysql');
+const bodyParser = require('body-parser');
+const path = require('path');
+
+const app = express();
+const server = http.createServer(app);
+const io = socketIo(server);
+
+let waitingPlayer = null;
+
+// Middleware
+app.use(express.static(__dirname));
+app.use(bodyParser.urlencoded({ extended: false }));
+app.use(bodyParser.json());
+
+// MySQL Connection
+const connection = mysql.createConnection({
+    host: "localhost",
+    user: "root",
+    password: "",
+    database: "email" // Specify the database
+});
+
+connection.connect((err) => {
+    if (err) {
+        console.error('Error connecting to MySQL:', err.message);
+        return;
+    }
+    console.log('Connected to MySQL!');
+});
+
+// Create database and table if they don't exist (run once)
+function initializeDatabase() {
+    const createDbQuery = 'CREATE DATABASE IF NOT EXISTS email';
+    connection.query(createDbQuery, (err) => {
+        if (err) console.error('Error creating database:', err.message);
+        else console.log('Database "email" created or already exists.');
+
+        const useDbQuery = 'USE email';
+        connection.query(useDbQuery, (err) => {
+            if (err) console.error('Error switching to database:', err.message);
+            else console.log('Using "email" database.');
+
+            const createTableQuery = `
+                CREATE TABLE IF NOT EXISTS emails (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    email VARCHAR(255) NOT NULL UNIQUE
+                )
+            `;
+            connection.query(createTableQuery, (err) => {
+                if (err) console.error('Error creating table:', err.message);
+                else console.log('"emails" table created or already exists.');
+            });
+        });
+    });
+}
+
+initializeDatabase(); // Call this function when the server starts
+
+// Email Subscription Route
+
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'home.html'));
+});
+
+app.post('/home.html', (req, res) => {
+    const email = req.body.email;
+
+    if (!email) {
+        return res.status(400).send('Email is required.');
+    }
+
+    if (!isValidEmail(email)) {
+        console.log('Invalid email format:', email);
+        return res.status(400).send('Invalid email format.');
+    }
+
+    insertEmail(email, connection, res);
+});
+
+function isValidEmail(email) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+}
+
+function insertEmail(email, connection, res) {
+    const checkQuery = 'SELECT COUNT(*) AS count FROM emails WHERE email = ?';
+    connection.query(checkQuery, [email], (err, results) => {
+        if (err) {
+            console.error('Error checking for duplicate email:', err.message);
+            return res.status(500).send('Error checking email.');
+        }
+
+        const count = results[0].count;
+        if (count > 0) {
+            console.log('Email already exists:', email);
+            return res.status(409).send('Email already exists.');
+        } else {
+            const insertQuery = 'INSERT INTO emails (email) VALUES (?)';
+            connection.query(insertQuery, [email], (err) => {
+                if (err) {
+                    console.error('Error inserting email:', err.message);
+                    return res.status(500).send('Error inserting email.');
+                }
+
+                console.log('Email successfully inserted:', email);
+                return res.status(200).send('Email successfully subscribed!');
+            });
+        }
+    });
+}
+
+// Serve the HTML file
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+// Socket.IO Logic
+io.on('connection', (socket) => {
+    console.log(`Player connected: ${socket.id}`);
+
+    // Matchmaking
+    socket.on('findMatch', () => {
+        if (waitingPlayer) {
+            const roomId = `room-${Date.now()}`;
+            [waitingPlayer, socket].forEach((s) => s.join(roomId));
+            io.to(roomId).emit('gameStart', { room: roomId });
+            waitingPlayer = null;
+        } else {
+            waitingPlayer = socket;
+            socket.emit('waitingForPlayer');
+        }
+    });
+
+    // Handle stone placement
+    socket.on('placeStone', ({ room, row, col, player }) => {
+        // Broadcast move to the other player
+        socket.to(room).emit('opponentMove', { row, col, player });
+    });
+
+    // Handle passing
+    socket.on('passTurn', (room) => {
+        socket.to(room).emit('opponentPassed');
+    });
+
+    // Handle disconnection
+    socket.on('disconnect', () => {
+        console.log(`Player disconnected: ${socket.id}`);
+        if (socket === waitingPlayer) waitingPlayer = null;
+    });
+});
+
+server.listen(3000, () => console.log('Server running on port 3000'));

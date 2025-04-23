@@ -10,6 +10,7 @@ const server = http.createServer(app);
 const io = socketIo(server);
 
 let waitingPlayer = null;
+const games = {};
 
 // Middleware
 app.use(express.static(__dirname));
@@ -113,7 +114,7 @@ function insertEmail(email, connection, res) {
     });
 }
 
-// Serve the HTML file
+// Serve the HTML file*********************************************************
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
@@ -126,24 +127,51 @@ io.on('connection', (socket) => {
     socket.on('findMatch', () => {
         if (waitingPlayer) {
             const roomId = `room-${Date.now()}`;
-            [waitingPlayer, socket].forEach((s) => s.join(roomId));
-            io.to(roomId).emit('gameStart', { room: roomId });
+            const game = {
+                players: {
+                    [waitingPlayer.id]: 'black',
+                    [socket.id]: 'white'
+                },
+                currentTurn: 'black'
+            };
+
+            games[roomId] = game;
+
+            // Notify players with their colors
+            waitingPlayer.emit('gameStart', { 
+                room: roomId, 
+                color: 'black',
+                currentTurn: 'black'
+            });
+
+            socket.emit('gameStart', { 
+                room: roomId, 
+                color: 'white',
+                currentTurn: 'black'
+            });
+            
+            waitingPlayer.join(roomId);
+            socket.join(roomId);
             waitingPlayer = null;
         } else {
             waitingPlayer = socket;
-            socket.emit('waitingForPlayer');
         }
     });
 
     // Handle stone placement
     socket.on('placeStone', ({ room, row, col, player }) => {
-        // Broadcast move to the other player
-        socket.to(room).emit('opponentMove', { row, col, player });
-    });
-
-    // Handle passing
-    socket.on('passTurn', (room) => {
-        socket.to(room).emit('opponentPassed');
+    const game = games[room];
+    
+    // Validate move
+    if (game.currentTurn !== player) {
+        socket.emit('invalidMove', 'Not your turn!');
+        return;
+    }
+    
+    // Process valid move
+    game.currentTurn = game.currentTurn === 'black' ? 'white' : 'black';
+    io.to(room).emit('turnUpdate', { currentTurn: game.currentTurn });
+    socket.to(room).emit('opponentMove', { row, col, player });
     });
 
     // Handle disconnection

@@ -1,8 +1,44 @@
-const socket = io(); // Connect to the server
+const socket = io()
 
-let currentRoom = null;
+const grid = document.getElementById('board');
+const rows = ['9', '8', '7', '6', '5', '4', '3', '2', '1', '0', '-1', '-2', '-3', '-4', '-5', '-6', '-7', '-8', '-9'];
+const cols = ['-9', '-8', '-7', '-6', '-5', '-4', '-3', '-2', '-1', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+const size = 19;
+const moveHistory = document.getElementById('move-history');
+const turnDisplay = document.getElementById('turn');
+let currentPlayer = 'black';
+let gameBoard = Array(size).fill().map(() => Array(size).fill(null));
+let intersectionCounter = 0;
 
-// UI and Display Functions
+let playerColor = null;
+let currentTurn = null;
+
+// Passing count
+let passCount = 0;
+let stonesPlaced = 0;
+let areaScoringPhase = false;
+const totalStones = 361; // 19x19 board
+
+const margin = 50;
+const lineLength = 900;
+
+// Timer variables
+let timeLeftBlack = 600;
+let timeLeftWhite = 600;
+let countdownInterval;
+let gameStarted = false;
+let canPlaceStone = false;
+const countdownDisplayBlack = document.getElementById('countdown-player-black');
+const countdownDisplayWhite = document.getElementById('countdown-player-white');
+
+const blackPlayerName = document.getElementById('player-name-black')
+const whitePlayerName = document.getElementById('player-name-white')
+const blackPlayerRanking = document.getElementById('black-player-ranking')
+const whitePlayerRanking = document.getElementById('white-player-ranking')
+
+const winnerDisplay = document.getElementById('winner-display');
+const passButton = document.getElementById('pass');
+
 function displayName() {
     blackPlayerName.textContent = "Black"
     whitePlayerName.textContent = "White"
@@ -13,8 +49,29 @@ function displayRanking() {
     whitePlayerRanking.textContent = "1000"
 }
 
-// Function to update the displayed time
-function updateDisplayCountdown(player) {
+function enableStones() {
+    const intersections = document.querySelectorAll('.intersection');
+    intersections.forEach(intersection => {
+        intersection.addEventListener('click', placeStone);
+    });
+}
+
+function disableStones() {
+    const intersections = document.querySelectorAll('.intersection');
+    intersections.forEach(intersection => {
+        intersection.removeEventListener('click', placeStone);
+    });
+}
+
+function startGame() {
+    if (!gameStarted) {
+        gameStarted = true;
+        turnDisplay.textContent = `${currentPlayer.charAt(0).toUpperCase() + currentPlayer.slice(1)}'s turn`;
+    }
+}
+
+function updateCountdown(player) {
+    if (!gameStarted) return;
     let timeLeft;
     let countdownDisplay;
     if (player === 'black') {
@@ -28,85 +85,35 @@ function updateDisplayCountdown(player) {
     let seconds = timeLeft % 60;
     seconds = seconds < 10 ? '0' + seconds : seconds;
     countdownDisplay.textContent = `${minutes}:${seconds}`;
+    if (timeLeft <= 0) {
+        clearInterval(countdownInterval);
+        countdownDisplay.textContent = 'Time is up!';
+        endGame();
+    } else {
+        if (player === 'black') {
+            timeLeftBlack--;
+        } else {
+            timeLeftWhite--;
+        }
+    }
 }
 
-//Function to update move history
+function switchTurns() {
+    currentPlayer = currentPlayer === 'black' ? 'white' : 'black';
+    turnDisplay.textContent = `${currentPlayer.charAt(0).toUpperCase() + currentPlayer.slice(1)}'s turn`;
+    if (gameStarted) {
+        clearInterval(countdownInterval);
+        countdownInterval = setInterval(() => updateCountdown(currentPlayer), 1000);
+    }
+}
+
 function updateMoveHistory(action) {
     const move = document.createElement('p');
     move.textContent = `${currentPlayer}: ${action === 'pass' ? 'Pass' : `Row ${rows}, Col ${cols}`}`;
     moveHistory.appendChild(move);
     moveHistory.scrollTop = moveHistory.scrollHeight;
 }
-
-//Socket.IO Logic and Game Flow Functions
-function switchTurnsAndSendEvent() {
-    switchTurns();
-    turnDisplay.textContent = `${currentPlayer.charAt(0).toUpperCase() + currentPlayer.slice(1)}'s turn`;
-    socket.emit('switchTurn', currentRoom); // Send turn switch event to server
-    if (gameStarted) {
-        clearInterval(countdownInterval);
-        countdownInterval = setInterval(() => updateDisplayCountdown(currentPlayer), 1000);
-    }
-}
-
-function updateCountdownAndSendEvent(player) {
-    updateCountdown(player);
-    updateDisplayCountdown(player)
-    socket.emit('updateCountdown', {
-        room: currentRoom,
-        timeLeftBlack,
-        timeLeftWhite
-    }); // Emit the updated time to the server
-}
-
-function endGame(winner) {
-    gameStarted = false; // Stop the game
-    clearInterval(countdownInterval);
-
-    // Remove click event listeners to prevent stone placement
-    const intersections = document.querySelectorAll('.intersection');
-    intersections.forEach(intersection => {
-        intersection.removeEventListener('click', placeStone);
-    });
-
-    // Display the winner in the winnerDisplay div
-    winnerDisplay.textContent = `${winner}`;
-    winnerDisplay.style.display = 'block'; // Make the winner display visible
-    socket.emit('endGame', {
-        room: currentRoom,
-        winner: winner
-    }); // Notify server that the game has ended
-}
-
-function removeDeadStonesAndUpdateUI(currentPlayer) {
-    const stonesToRemove = removeDeadStones(currentPlayer);
-    removeDeadStonesFromUI(stonesToRemove);
-    socket.emit('removeDeadStones', {
-        room: currentRoom,
-        currentPlayer,
-        stonesToRemove
-    }); // Notify the server about stones removed
-}
-
-function removeDeadStonesFromUI(stonesToRemove) {
-    stonesToRemove.forEach(([r, c]) => {
-        const intersections = document.querySelectorAll('.intersection');
-        let targetIntersection = null;
-        intersections.forEach(intersection => {
-            if (parseInt(intersection.dataset.row) === (r + 1) && parseInt(intersection.dataset.col) === (c + 1)) {
-                targetIntersection = intersection;
-            }
-        });
-        if (targetIntersection) {
-            const stone = targetIntersection.querySelector('.stone');
-            if (stone) {
-                targetIntersection.removeChild(stone);
-            }
-        }
-    });
-}
-
-// UI setup (grid lines, labels, intersections)
+// Create grid lines and intersections (same as before)
 for (let i = 1; i <= 19; i++) {
     const line = document.createElement('div');
     line.className = 'grid-line horizontal';
@@ -115,7 +122,6 @@ for (let i = 1; i <= 19; i++) {
     line.style.width = `${lineLength}px`
     grid.appendChild(line);
 }
-
 for (let i = 1; i <= 19; i++) {
     const line = document.createElement('div');
     line.className = 'grid-line vertical';
@@ -124,7 +130,7 @@ for (let i = 1; i <= 19; i++) {
     line.style.height = `${lineLength}px`
     grid.appendChild(line);
 }
-
+// Create intersections
 for (let i = 1; i <= 19; i++) {
     for (let j = 1; j <= 19; j++) {
         const intersection = document.createElement('div');
@@ -142,7 +148,6 @@ for (let i = 1; i <= 19; i++) {
         intersectionCounter++;
     }
 }
-
 for (let i = 0; i <= 19; i++) {
     const rowLabel = document.createElement('div');
     rowLabel.className = 'label';
@@ -151,7 +156,6 @@ for (let i = 0; i <= 19; i++) {
     rowLabel.style.top = `${(i + 1) * 50 - 5}px`;
     grid.appendChild(rowLabel);
 }
-
 for (let j = 0; j <= 19; j++) {
     const colLabel = document.createElement('div');
     colLabel.className = 'label';
@@ -161,18 +165,19 @@ for (let j = 0; j <= 19; j++) {
     grid.appendChild(colLabel);
 }
 
-//Primary Game Logic and Socket.IO integration
 function placeStone(e) {
-    if (!gameStarted) {
-        startGame();
+
+    if (playerColor !== currentTurn) {
+        alert("Wait for your turn!");
+        return;
     }
-    if (!gameStarted) return; // Prevent placing stones after the game ends
 
     const row = parseInt(e.target.dataset.row) - 1;
     const col = parseInt(e.target.dataset.col) - 1;
 
     if (gameBoard[row][col] !== null) return;
 
+    // Suicide Prevention
     if (isSuicideMove(row, col, currentPlayer)) {
         alert("That move is suicide and not allowed.");
         return;
@@ -184,16 +189,153 @@ function placeStone(e) {
     stone.classList.add('stone', currentPlayer);
     e.target.appendChild(stone);
 
-    // Update the countdown immediately
-    updateCountdownAndSendEvent(currentPlayer);
+    const move = document.createElement('p');
+    move.textContent = `${currentPlayer}: Row ${row}, Col ${col}`;
+    moveHistory.appendChild(move);
+    moveHistory.scrollTop = moveHistory.scrollHeight;
 
-    //Send the move to the server
+    // Update the countdown immediately
+    updateCountdown(currentPlayer);
+
+    // Defer potentially slow operations
+    setTimeout(() => {
+        removeDeadStones(currentPlayer === 'black' ? 'white' : 'black');
+        switchTurns();
+    }, 0);
+
     socket.emit('placeStone', {
         room: currentRoom,
         row: row,
         col: col,
         player: currentPlayer
     });
+}
+
+function updateTurnDisplay() {
+    turnDisplay.textContent = currentTurn === playerColor ? 
+        "Your turn!" : 
+        "Opponent's turn";
+}
+
+function removeDeadStones(currentPlayer) {
+    for (let i = 0; i < size; i++) {
+        for (let j = 0; j < size; j++) {
+            if (gameBoard[i][j] === currentPlayer) {
+                if (!groupHasLiberties(i, j)) { // Use groupHasLiberties
+                    removeGroup(i, j);
+                }
+            }
+        }
+    }
+}
+
+function groupHasLiberties(row, col) {
+    const color = gameBoard[row][col];
+    const visited = new Set(); // Keep track of visited stones to avoid infinite loops
+    const stack = [[row, col]];
+    while (stack.length > 0) {
+        const [r, c] = stack.pop();
+        const key = `${r},${c}`; // Unique key for each cell
+        if (visited.has(key) || gameBoard[r][c] !== color) {
+            continue; // Skip if already visited or not the same color
+        }
+        visited.add(key);
+        const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+        for (let [dx, dy] of directions) {
+            const newRow = r + dx;
+            const newCol = c + dy;
+            if (newRow >= 0 && newRow < size && newCol >= 0 && newCol < size) {
+                if (gameBoard[newRow][newCol] === null) {
+                    return true; // Found a liberty for the group
+                }
+            }
+        }
+        // Add neighbors to the stack
+        for (let [dx, dy] of directions) {
+            const newRow = r + dx;
+            const newCol = c + dy;
+            if (newRow >= 0 && newRow < size && newCol >= 0 && newCol < size && gameBoard[newRow][newCol] === color) {
+                stack.push([newRow, newCol]);
+            }
+        }
+    }
+    return false; // No liberties found for the entire group
+}
+
+function hasLiberties(row, col) {
+    const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+    for (let [dx, dy] of directions) {
+        const newRow = row + dx;
+        const newCol = col + dy;
+        if (newRow >= 0 && newRow < size && newCol >= 0 && newCol < size) {
+            if (gameBoard[newRow][newCol] === null) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+function removeGroup(row, col) {
+    const color = gameBoard[row][col];
+    const stack = [[row, col]];
+    const stonesToRemove = [];
+    while (stack.length > 0) {
+        const [r, c] = stack.pop();
+        if (r < 0 || r >= size || c < 0 || c >= size || gameBoard[r][c] !== color) continue;
+        stonesToRemove.push([r, c]);
+        gameBoard[r][c] = null;
+        const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+        for (let [dx, dy] of directions) {
+            const newRow = r + dx;
+            const newCol = c + dy;
+            if (newRow >= 0 && newRow < size && newCol >= 0 && newCol < size && gameBoard[newRow][newCol] === color) {
+                stack.push([newRow, newCol]);
+            }
+        }
+    }
+    stonesToRemove.forEach(([r, c]) => {
+        const intersections = document.querySelectorAll('.intersection');
+        let targetIntersection = null;
+        intersections.forEach(intersection => {
+            if (parseInt(intersection.dataset.row) === (r + 1) && parseInt(intersection.dataset.col) === (c + 1)) {
+                targetIntersection = intersection;
+            }
+        });
+        if (targetIntersection) {
+            const stone = targetIntersection.querySelector('.stone');
+            if (stone) {
+                targetIntersection.removeChild(stone);
+            }
+        }
+    });
+}
+
+function isSuicideMove(row, col, player) {
+    // Temporarily place the stone on the board
+    gameBoard[row][col] = player;
+    // Check if the group has liberties
+    const hasLiberties = groupHasLiberties(row, col);
+    let captured = false;
+    //If the move doesn't have liberties, check if captures are made
+    if (!hasLiberties) {
+        const opponent = player === 'black' ? 'white' : 'black';
+        const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+        for (const [dr, dc] of directions) {
+            const newRow = row + dr;
+            const newCol = col + dc;
+            if (newRow >= 0 && newRow < size && newCol >= 0 && newCol < size && gameBoard[newRow][newCol] === opponent) {
+                if (!groupHasLiberties(newRow, newCol)) {
+                    captured = true;
+                    break;
+                }
+            }
+        }
+    }
+    // Remove the temporarily placed stone
+    gameBoard[row][col] = null;
+    // The move is suicidal if has no liberties and no captures are made.
+    return !hasLiberties && !captured;
 }
 
 passButton.addEventListener('click', () => {
@@ -206,23 +348,123 @@ passButton.addEventListener('click', () => {
         areaScoringPhase = true;
         // Display message to indicate area scoring phase
         turnDisplay.textContent = "Area scoring phase. Mark dead stones.";
+        endGame(); // End game immediately after the second pass
     } else {
-        switchTurnsAndSendEvent();
+        switchTurns();
         updateMoveHistory('pass');
     }
 });
 
-displayName();
-displayRanking();
+function calculateTerritory() {
+    let blackTerritory = 0;
+    let whiteTerritory = 0;
+    const visited = Array(size).fill().map(() => Array(size).fill(false));
 
-// Socket.IO Event Handlers
+    function floodFill(row, col, territoryColor) {
+        if (row < 0 || row >= size || col < 0 || col >= size || visited[row][col] || gameBoard[row][col] !== null) {
+            return;
+        }
+        visited[row][col] = true;
+        const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+        for (const [dx, dy] of directions) {
+            floodFill(row + dx, col + dy, territoryColor);
+        }
+        if (territoryColor === 'black') {
+            blackTerritory++;
+        } else {
+            whiteTerritory++;
+        }
+    }
+    for (let i = 0; i < size; i++) {
+        for (let j = 0; j < size; j++) {
+            if (gameBoard[i][j] === null && !visited[i][j]) {
+                let controlledBy = null;
+                let foundContradiction = false;
+                const territoryStack = [[i, j]];
+                const territoryCells = [];
+                while (territoryStack.length > 0) {
+                    const [row, col] = territoryStack.pop();
+                    if (row < 0 || row >= size || col < 0 || col >= size || territoryCells.some(cell => cell[0] === row && cell[1] === col)) {
+                        continue;
+                    }
+                    if (gameBoard[row][col] === 'black' || gameBoard[row][col] === 'white') {
+                        if (controlledBy === null) {
+                            controlledBy = gameBoard[row][col];
+                        } else if (controlledBy !== gameBoard[row][col]) {
+                            foundContradiction = true;
+                            break;
+                        }
+                    } else {
+                        territoryCells.push([row, col]);
+                        const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+                        for (const [dx, dy] of directions) {
+                            territoryStack.push([row + dx, col + dy]);
+                        }
+                    }
+                }
+                if (!foundContradiction && controlledBy !== null) {
+                    territoryCells.forEach(([row, col]) => {
+                        visited[row][col] = true;
+                        if (controlledBy === 'black') {
+                            blackTerritory++;
+                        } else {
+                            whiteTerritory++;
+                        }
+                    });
+                }
+            }
+        }
+    }
+    return {
+        blackTerritory,
+        whiteTerritory
+    };
+}
+
+function endGame() {
+    gameStarted = false; // Stop the game
+    clearInterval(countdownInterval);
+
+    // Remove click event listeners to prevent stone placement
+    const intersections = document.querySelectorAll('.intersection');
+    intersections.forEach(intersection => {
+        intersection.removeEventListener('click', placeStone);
+    });
+
+    const { blackTerritory, whiteTerritory } = calculateTerritory();
+    const blackStones = gameBoard.flat().filter(stone => stone === 'black').length;
+    const whiteStones = gameBoard.flat().filter(stone => stone === 'white').length;
+    const blackScore = blackTerritory + blackStones;
+    const whiteScore = whiteTerritory + whiteStones;
+    let winner;
+
+    if (blackScore > whiteScore) {
+        winner = 'Black Wins';
+    } else if (whiteScore > blackScore) {
+        winner = 'White Wins';
+    } else {
+        winner = 'Tie';
+    }
+
+    // Display the winner in the winnerDisplay div
+    winnerDisplay.textContent = `${winner}`;
+    winnerDisplay.style.display = 'block'; // Make the winner display visible
+}
+
+
+displayName()
+displayRanking()
+startGame();
+
 socket.on('connect', () => {
     console.log('Connected to server');
+    disableStones() 
 });
 
 // Matchmaking
 document.getElementById('find-match').addEventListener('click', () => {
     socket.emit('findMatch');
+    document.getElementById('find-match').disabled = true;
 });
 
 socket.on('waitingForPlayer', () => {
@@ -230,8 +472,18 @@ socket.on('waitingForPlayer', () => {
 });
 
 socket.on('gameStart', (data) => {
+    playerColor = data.color;
+    currentTurn = data.currentTurn;
     alert("Game started! You are in room: " + data.room);
+    updateTurnDisplay();
     currentRoom = data.room;
+    enableStones()
+    turnDisplay.textContent = `${currentPlayer.charAt(0).toUpperCase() + currentPlayer.slice(1)}'s turn`;
+});
+
+socket.on('turnUpdate', ({ currentTurn: serverCurrentTurn }) => {
+    currentTurn = serverCurrentTurn;
+    updateTurnDisplay();
 });
 
 socket.on('opponentMove', ({
@@ -277,6 +529,7 @@ socket.on('endGame', ({
     winner
 }) => {
     endGame(winner)
+    disableStones() 
 });
 
 //Handle the other player removing the dead stones

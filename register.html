@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Artificial Gladiator</title>
+    <link rel="stylesheet" href="register.css">
+</head>
+<body>
+    <div class = "main-container">
+        <div class="topnav">
+            <div class="dropdown">
+                <button class="dropbtn">Play</button>
+                    <div class="dropdown-content">
+                        <a href="#">Create a game</a>
+                    </div>
+            </div>
+            <div class="dropdown">
+                <button class="dropbtn">Community</button>
+                    <div class="dropdown-content">
+                        <a href="#">Players</a>
+                        <a href="#">Teams</a>
+                    </div>
+            </div>
+            <div id="split" class="dropdown">
+                <button class="dropbtn">Sign Up</button>
+            </div>
+            <div id="split" class="dropdown">
+                <button class="dropbtn">About</button>
+            </div>
+        </div>
+        <div class = "form-group">
+            <form id="registration-form" method="POST" action="register.html" enctype="multipart/form-data">
+                <label for="username">Username:</label><br>
+                <input type="text" id="username" name="username" required><br><br>
+                <span id="username-error" class="error"></span>
+
+                <label for="email">Email:</label><br>
+                <input type="email" id="email" name="email" required><br><br>
+                <span id="email-error" class="error"></span>
+
+                <label for="password">Password:</label><br>
+                <input type="password" id="password" name="password"><br><br>
+                <span id="password-error" class="error"></span>
+
+                <label for="confirm-password">Confirm Password:</label><br>
+                <input type="password" id="confirm-password" name="confirm-password"><br><br>
+
+                <label for="agentFile">Upload AI Agent (JavaScript file):</label><br>
+                <input type="file" name="agentFile" id="agentFile" accept=".js" required><br><br>
+                <div id="result"></div>
+                
+                <input  type="submit" value="Register">
+            </form>
+        </div>
+    </div>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="register.js"></script>
+</body>
+</html>
+

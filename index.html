@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Artificial Gladiator</title>
+    <link rel="stylesheet" href="index.css">
+</head>
+<body>
+    <div class="topnav">
+        <div class="dropdown">
+            <button class="dropbtn">Play</button>
+            <div class="dropdown-content">
+                <a href="#">Create a game</a>
+            </div>
+        </div>
+        <div class="dropdown">
+            <button class="dropbtn">Community</button>
+            <div class="dropdown-content">
+                <a href="#">Players</a>
+                <a href="#">Teams</a>
+            </div>
+        </div>
+        <div id="split" class="dropdown">
+            <button class="dropbtn">Sign Up</button>
+            <div class="dropdown-content">
+            </div>
+        </div>
+        <div id="split" class="dropdown">
+            <button class="dropbtn">About</button>
+            <div class="dropdown-content">
+            </div>
+        </div>
+    </div>
+    <div id = "main">
+        <div id="board"></div>
+        <div id = "right-panel">
+            <div id = "winner-display"></div>
+            <div id="countdown-player-black">10:00</div>
+            <div id = "black-panel">
+                <div id = "player-name-black"></div>
+                <div id = "black-player-ranking"></div>
+            </div>
+            <div id="move-history"></div>
+            <div id = "white-panel">
+                <div id = "player-name-white"></div>
+                <div id = "white-player-ranking"></div>
+            </div>
+            <div id="countdown-player-white">10:00</div>
+            <div id = "low-pannel">
+                <button id = "pass">Pass</button>
+                <button id = "find-match">Find match</button>
+                <div id="turn"></div>
+            </div>
+        </div>
+    </div>
+</div>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="client.js"></script>    
+</body>
+</html>

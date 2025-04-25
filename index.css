@@ -1,0 +1,271 @@
+body {
+    background-color: black;
+  }
+  
+  .topnav {
+    margin-left: 100px;
+    margin-right: 100px;
+    margin-top: -10px;
+  }
+  
+  #split {
+    float: right;
+  }
+  
+  .dropbtn {
+    background-color: black;
+    color: grey;
+    padding: 16px;
+    font-size: 16px;
+    border: none;
+  }
+  
+  .dropdown {
+    position: relative;
+    display: inline-block;
+  }
+  
+  .dropdown-content {
+    display: none;
+    position: absolute;
+    background-color: #f1f1f1;
+    min-width: 160px;
+    z-index: 1;
+  }
+  
+  .dropdown-content a {
+    background-color: rgb(70, 70, 70);
+    color: grey;
+    padding: 12px 12px;
+    font-size: 16px;
+    text-decoration: none;
+    display: block;
+  }
+  
+  .dropdown-content a:hover {
+    background-color: #1a16ec;
+  }
+  
+  .dropdown:hover .dropdown-content {
+    display: block;
+  }
+  
+  .dropdown:hover .dropbtn {
+    background-color: rgb(70, 70, 70);
+  }
+  
+  #board {
+    position: absolute;
+    width: 1000px;
+    height: 1000px;
+    left: 10%;
+    top: 10%;
+    background-color: #dcb35c;
+    box-sizing: border-box;
+    border-radius: 10px;
+  }
+  
+  .grid-line {
+    position: absolute;
+    background-color: black;
+  }
+  
+  .horizontal {
+    width: 100%;
+    height: 2px;
+    left: 0;
+  }
+  
+  .vertical {
+    width: 2px;
+    height: 100%;
+    top: 0;
+  }
+  
+  .label {
+    position: absolute;
+    font-weight: bold;
+  }
+  
+  .intersection {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    background-color: transparent;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 2; /* Ensure it's above the grid lines */
+  }
+  
+  #hoshi{
+    width: 10px;
+    height: 10px;
+    background-color: black;
+    border-radius: 50%;
+  }
+  
+  .stone {
+    position: absolute;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1;
+  }
+  
+  .black {
+    background-color: #000;
+  }
+  
+  .white {
+    background-color: #fff;
+  }
+  
+  #main {
+    display: flex;  /* Enable flexbox */
+    flex-direction: row; /* Arrange items in a row (board and right panel) */
+    width: 100%;       /* Take up the full width */
+    height: 80vh; /* Take up 80% of the viewport height */
+    justify-content: space-between; /* Distribute space between board and right panel */
+    align-items: flex-start; /* Align items to the top */
+    margin-top: 20px;  /* Add some top margin for spacing */
+  }
+
+  #right-panel {
+    display: flex;
+    flex-direction: column;
+    position: relative; /* Changed from fixed to absolute */
+    /* Calculate the left position: Board's left + Board's width + desired margin */
+    left: calc(10% + 1000px + 20px); /* Example margin of 20px */
+    top: 10%; /* Align with the top of the board */
+    width: 20%;
+    height: 60%;
+    /* border: 1px solid white;  For debugging layout */
+    margin: 0px;
+  }
+
+  #winner-display {
+    text-align: center;
+    font-size: 2em;
+    color: white;
+    position: absolute; /* Position absolutely within right-panel */
+    top: -50px; /* Adjust as needed */
+    left: 50%;
+    transform: translateX(-50%); /* Center horizontally */
+    z-index: 1000; /* Ensure it's on top of other elements */
+    display: none; /* Initially hidden */
+    width: 100%; /* Take up the full width of the right panel */
+  }
+  
+  #countdown-player-black {
+    text-align: center;
+    font-size: 4em;
+    color: white;
+    margin-bottom: 20px; /* Space between timer and move history */
+    background-color: grey;
+    border-radius: 8px;
+  }
+
+  #black-panel {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between; /* This spreads out the items */
+    align-items: center; /* This vertically centers the items */
+  }
+
+  #player-name-black {
+    text-align: left;
+    color: white;
+    font-size: 3em;
+    margin-bottom: 10px;  /* Add spacing below the name */
+  }
+
+  #black-player-ranking {
+    text-align: right;
+    color: white;
+    font-size: 3em;
+    margin-bottom: 10px;  /* Add spacing below the name */
+  }
+  
+  #move-history {
+    flex: 0 0 auto;
+    color: white;
+    margin-bottom: 20px;
+    height: 300px; /* Increased height */
+    width: 100%;    /* Reduced width with margins */
+    padding: 10px;  /* Added padding */
+    background-color: #333; /* Dark background */
+    overflow-y: scroll;
+    border: 1px solid #555; /* Added border */
+    border-radius: 8px;
+  }
+
+  #move-history p {
+    font-size: 2em;   /* Smaller font size for each move */
+    margin-left: 10px;     /* Add spacing between moves */
+  }
+
+  #white-panel {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between; /* This spreads out the items */
+    align-items: center; /* This vertically centers the items */
+  }
+
+  #player-name-white {
+    text-align: left;
+    color: white;
+    font-size: 3em;
+    margin-bottom: 10px;  /* Add spacing below the name */
+  }
+
+  #white-player-ranking {
+    text-align: right;
+    color: white;
+    font-size: 3em;
+    margin-bottom: 10px;  /* Add spacing below the name */
+  }
+  
+  #countdown-player-white {
+    text-align: center;
+    font-size: 4em;
+    color: white;
+    margin-bottom: 20px;
+    background-color: grey; /* Changed to black for black player */
+    border-radius: 8px;
+  }
+
+  #low-pannel {
+    display: flex;
+    flex-direction: column;
+    align-items: center
+  }
+  
+  #turn { 
+    color: white;
+    font-size: 2em;
+    text-align: center;
+  }
+  
+
+  #pass {
+    background-color: aqua;
+    font-size: 2em;
+    width: 50%;
+    justify-items: center;
+    margin: 0 auto;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+
+  #find-match {
+    background-color: #ffee00;
+    font-size: 2em;
+    width: 50%;
+    justify-items: center;
+    margin: 0 auto;
+    border-radius: 8px;
+    cursor: pointer;
+  }

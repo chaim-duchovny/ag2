@@ -66,7 +66,6 @@ function disableStones() {
 function startGame() {
     if (!gameStarted) {
         gameStarted = true;
-        turnDisplay.textContent = `${currentPlayer.charAt(0).toUpperCase() + currentPlayer.slice(1)}'s turn`;
     }
 }
 
@@ -100,7 +99,6 @@ function updateCountdown(player) {
 
 function switchTurns() {
     currentPlayer = currentPlayer === 'black' ? 'white' : 'black';
-    turnDisplay.textContent = `${currentPlayer.charAt(0).toUpperCase() + currentPlayer.slice(1)}'s turn`;
     if (gameStarted) {
         clearInterval(countdownInterval);
         countdownInterval = setInterval(() => updateCountdown(currentPlayer), 1000);
@@ -200,7 +198,6 @@ function placeStone(e) {
     // Defer potentially slow operations
     setTimeout(() => {
         removeDeadStones(currentPlayer === 'black' ? 'white' : 'black');
-        switchTurns();
     }, 0);
 
     socket.emit('placeStone', {
@@ -212,21 +209,28 @@ function placeStone(e) {
 }
 
 function updateTurnDisplay() {
-    turnDisplay.textContent = currentTurn === playerColor ? 
-        "Your turn!" : 
-        "Opponent's turn";
+    turnDisplay.textContent = currentTurn.charAt(0).toUpperCase() + currentTurn.slice(1) + " move";
 }
 
-function removeDeadStones(currentPlayer) {
+function removeDeadStones(playerToCheck) {
+    const removed = [];
+    const visited = new Set();
+
     for (let i = 0; i < size; i++) {
         for (let j = 0; j < size; j++) {
-            if (gameBoard[i][j] === currentPlayer) {
-                if (!groupHasLiberties(i, j)) { // Use groupHasLiberties
-                    removeGroup(i, j);
+            if (gameBoard[i][j] === playerToCheck && !visited.has(`${i},${j}`)) {
+                if (!groupHasLiberties(i, j)) {
+                    const stones = removeGroup(i, j);
+                    removed.push(...stones);
+                    stones.forEach(([r, c]) => visited.add(`${r},${c}`));
                 }
             }
         }
     }
+    if (removed.length > 0) {
+        socket.emit('removeDeadStones', { room: currentRoom, stones: removed });
+    }
+    return removed;
 }
 
 function groupHasLiberties(row, col) {
@@ -287,28 +291,20 @@ function removeGroup(row, col) {
         gameBoard[r][c] = null;
         const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]];
         for (let [dx, dy] of directions) {
-            const newRow = r + dx;
-            const newCol = c + dy;
-            if (newRow >= 0 && newRow < size && newCol >= 0 && newCol < size && gameBoard[newRow][newCol] === color) {
-                stack.push([newRow, newCol]);
-            }
+            stack.push([r + dx, c + dy]);
         }
     }
+    // Remove from UI as before
     stonesToRemove.forEach(([r, c]) => {
         const intersections = document.querySelectorAll('.intersection');
-        let targetIntersection = null;
         intersections.forEach(intersection => {
             if (parseInt(intersection.dataset.row) === (r + 1) && parseInt(intersection.dataset.col) === (c + 1)) {
-                targetIntersection = intersection;
+                const stone = intersection.querySelector('.stone');
+                if (stone) intersection.removeChild(stone);
             }
         });
-        if (targetIntersection) {
-            const stone = targetIntersection.querySelector('.stone');
-            if (stone) {
-                targetIntersection.removeChild(stone);
-            }
-        }
     });
+    return stonesToRemove; // Return all removed positions
 }
 
 function isSuicideMove(row, col, player) {
@@ -339,21 +335,24 @@ function isSuicideMove(row, col, player) {
 }
 
 passButton.addEventListener('click', () => {
-    if (areaScoringPhase) {
-        endGame(); // End the game if in area scoring phase
+    // Prevent passing if it's not your turn
+    if (playerColor !== currentTurn) {
+        alert("It's not your turn!");
         return;
     }
-    passCount++;
-    if (passCount === 2) {
-        areaScoringPhase = true;
-        // Display message to indicate area scoring phase
-        turnDisplay.textContent = "Area scoring phase. Mark dead stones.";
-        endGame(); // End game immediately after the second pass
-    } else {
-        switchTurns();
-        updateMoveHistory('pass');
-    }
+    // Disable the pass button until the next turn
+    passButton.disabled = true;
+
+    // Emit the pass event with room and player info
+    socket.emit('pass', {
+        room: currentRoom,
+        player: playerColor
+    });
+    
+    // Optionally, update move history or UI immediately
+    updateMoveHistory('pass');
 });
+
 
 function calculateTerritory() {
     let blackTerritory = 0;
@@ -458,7 +457,8 @@ startGame();
 
 socket.on('connect', () => {
     console.log('Connected to server');
-    disableStones() 
+    disableStones()
+    document.getElementById('pass').disabled = true; 
 });
 
 // Matchmaking
@@ -478,12 +478,19 @@ socket.on('gameStart', (data) => {
     updateTurnDisplay();
     currentRoom = data.room;
     enableStones()
-    turnDisplay.textContent = `${currentPlayer.charAt(0).toUpperCase() + currentPlayer.slice(1)}'s turn`;
+    document.getElementById('pass').disabled = false; 
 });
 
 socket.on('turnUpdate', ({ currentTurn: serverCurrentTurn }) => {
     currentTurn = serverCurrentTurn;
     updateTurnDisplay();
+    switchTurns()
+
+    if (playerColor === currentTurn) {
+        enableStones();   // Allow this player to place a stone
+    } else {
+        disableStones();  // Prevent this player from placing a stone
+    }
 });
 
 socket.on('opponentMove', ({
@@ -532,10 +539,21 @@ socket.on('endGame', ({
     disableStones() 
 });
 
-//Handle the other player removing the dead stones
-socket.on('removeDeadStones', ({
-    currentPlayer,
-    stonesToRemove
-}) => {
-    removeDeadStonesFromUI(stonesToRemove);
+socket.emit('removeDeadStones', () => {
+    removeDeadStones(currentPlayer)
 });
+
+//Handle the other player removing the dead stones
+socket.on('removeDeadStones', (stones) => {
+    stones.forEach(([r, c]) => {
+        gameBoard[r][c] = null;
+        const intersections = document.querySelectorAll('.intersection');
+        intersections.forEach(intersection => {
+            if (parseInt(intersection.dataset.row) === (r + 1) && parseInt(intersection.dataset.col) === (c + 1)) {
+                const stone = intersection.querySelector('.stone');
+                if (stone) intersection.removeChild(stone);
+            }
+        });
+    });
+});
+

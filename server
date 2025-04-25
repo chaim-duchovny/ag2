@@ -155,23 +155,71 @@ io.on('connection', (socket) => {
             waitingPlayer = null;
         } else {
             waitingPlayer = socket;
+            socket.emit('waitingForPlayer');
         }
+    });
+
+    socket.on('pass', ({ room, player }) => {
+        const game = games[room];
+        if (!game) return;
+
+        // Add validation: Ensure it's the player's turn
+        if (player !== game.currentTurn) {
+            socket.emit('invalidMove', 'Not your turn to pass!');
+            return;
+        }
+
+        // Track pass count (add this property if not already present)
+        if (!game.passCount) game.passCount = 0;
+
+        game.passCount += 1;
+
+        // Switch turns
+        game.currentTurn = game.currentTurn === 'black' ? 'white' : 'black';
+
+        // If both players have passed consecutively, trigger area scoring/end game
+        if (game.passCount >= 2) {
+            io.to(room).emit('turnUpdate', { currentTurn: null }); // No one's turn
+            io.to(room).emit('endGame', { reason: 'Both players passed' });
+            // Optionally, handle scoring logic here
+        } else {
+            // Notify both players of the turn change
+            io.to(room).emit('turnUpdate', { currentTurn: game.currentTurn });
+        }
+
+        if (!game.history) game.history = [];
+        game.history.push({ type: 'pass', player });
+
+        // Broadcast updated history
+        io.to(room).emit('historyUpdate', game.history);
     });
 
     // Handle stone placement
     socket.on('placeStone', ({ room, row, col, player }) => {
-    const game = games[room];
-    
-    // Validate move
-    if (game.currentTurn !== player) {
-        socket.emit('invalidMove', 'Not your turn!');
-        return;
-    }
-    
-    // Process valid move
-    game.currentTurn = game.currentTurn === 'black' ? 'white' : 'black';
-    io.to(room).emit('turnUpdate', { currentTurn: game.currentTurn });
-    socket.to(room).emit('opponentMove', { row, col, player });
+        const game = games[room];
+        if (!game) return;
+        game.passCount = 0;
+        
+        // Validate move
+        if (game.currentTurn !== player) {
+            socket.emit('invalidMove', 'Not your turn!');
+            return;
+        }
+        
+        // Process valid move
+        game.currentTurn = game.currentTurn === 'black' ? 'white' : 'black';
+        io.to(room).emit('turnUpdate', { currentTurn: game.currentTurn });
+        socket.to(room).emit('opponentMove', { row, col, player });
+
+        if (!game.history) game.history = [];
+        game.history.push({ type: 'move', player, row, col });
+
+        // Broadcast updated history
+        io.to(room).emit('historyUpdate', game.history);
+    });
+
+    socket.on('removeDeadStones', ({ room, stones }) => {
+        io.to(room).emit('removeDeadStones', stones);
     });
 
     // Handle disconnection
@@ -179,6 +227,21 @@ io.on('connection', (socket) => {
         console.log(`Player disconnected: ${socket.id}`);
         if (socket === waitingPlayer) waitingPlayer = null;
     });
+
+    socket.on('historyUpdate', (history) => {
+        moveHistory.innerHTML = ''; // Clear existing history
+        history.forEach(entry => {
+            const move = document.createElement('p');
+            if (entry.type === 'move') {
+                move.textContent = `${entry.player}: Row ${entry.row}, Col ${entry.col}`;
+            } else if (entry.type === 'pass') {
+                move.textContent = `${entry.player}: Pass`;
+            }
+            moveHistory.appendChild(move);
+        });
+        moveHistory.scrollTop = moveHistory.scrollHeight;
+    });
+    
 });
 
 server.listen(3000, () => console.log('Server running on port 3000'));
